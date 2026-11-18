@@ -1,0 +1,11 @@
+/target
+/web/target
+/web/dist/*
+!/web/dist/.gitkeep
+/web/assets/tailwind.css
+/data
+/dist
+.env
+.DS_Store
+*.duckdb
+*.duckdb.wal

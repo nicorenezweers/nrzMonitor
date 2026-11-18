@@ -1,0 +1,39 @@
+//! nrzUI-Bausteine (aus der nrzUI-Registry kopiert, https://git.zweers.ch/nicorenezweers/nrzUI, MIT).
+//! Nicht pro App umgestalten – das Aussehen wird in nrzUI gepflegt.
+#![allow(dead_code, unused_imports, clippy::all)]
+
+pub mod app_shell;
+pub mod button;
+pub mod card;
+pub mod badge;
+pub mod input;
+pub mod label;
+pub mod select;
+pub mod switch;
+pub mod tabs;
+pub mod table;
+pub mod tooltip;
+pub mod dialog;
+pub mod sheet;
+pub mod skeleton;
+pub mod spinner;
+pub mod separator;
+pub mod progress;
+pub mod empty;
+pub mod callout;
+pub mod toast;
+pub mod popover;
+pub mod dropdown_menu;
+pub mod scroll_area;
+pub mod status;
+pub mod kbd;
+pub mod checkbox;
+pub mod chips;
+pub mod toggle_group;
+pub mod alert;
+pub mod collapsible;
+pub mod command;
+pub mod breadcrumb;
+pub mod slider;
+pub mod pagination;
+pub mod alert_dialog;

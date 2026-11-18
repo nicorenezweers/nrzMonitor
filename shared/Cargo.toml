@@ -1,0 +1,15 @@
+[package]
+name = "nrzmon-shared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "nrzMonitor – gemeinsame Typen (API, Metrik-Katalog) fuer Server und Oberflaeche"
+
+[lib]
+name = "shared"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

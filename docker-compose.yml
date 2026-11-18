@@ -1,0 +1,21 @@
+# nrzMonitor im Host-Modus (wie Netdata). Oberflaeche: http://<host>:8571
+services:
+  nrzmonitor:
+    image: 100.78.107.162:8390/nicorenezweers/nrz-monitor:1.0.0
+    container_name: nrzmonitor
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    cap_drop: [ALL]
+    cap_add: [SYS_PTRACE, DAC_READ_SEARCH, DAC_OVERRIDE, FOWNER, CHOWN, NET_RAW]
+    security_opt: [no-new-privileges:true, apparmor:unconfined]
+    environment:
+      TZ: Europe/Zurich
+      # NRZMON_PASSWORD: "geheim"          # Anmeldung verlangen
+      # NRZMON_DNS_MCP_TOKEN: "..."        # oder in der Oberflaeche eintragen
+    volumes:
+      - ./data:/data
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+      - /var/run/docker.sock:/var/run/docker.sock:ro

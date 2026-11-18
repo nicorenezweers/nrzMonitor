@@ -1,0 +1,55 @@
+[package]
+name = "nrzmon-web"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "nrzMonitor – Oberflaeche (Dioxus, WASM, nrzUI)"
+
+[workspace]
+
+[dependencies]
+dioxus = { version = "0.7.10", features = ["web", "router"] }
+shared = { path = "../shared", package = "nrzmon-shared" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+icons = { version = "0.19", features = ["dioxus"] }
+tw_merge = { version = "0.1", features = ["debug"] }
+strum = { version = "0.28", features = ["derive"] }
+gloo-net = { version = "0.6", default-features = false, features = ["http", "json", "websocket"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+futures = "0.3"
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+  "Window", "Document", "Element", "HtmlElement", "HtmlInputElement", "Location", "History", "Storage", "Navigator",
+  "DomRect", "Event", "EventTarget", "MouseEvent", "PointerEvent", "KeyboardEvent", "WheelEvent",
+  "Clipboard", "MediaQueryList", "ScrollIntoViewOptions", "ScrollBehavior", "ScrollLogicalPosition",
+  "Node", "NodeList", "CssStyleDeclaration", "Blob", "BlobPropertyBag", "Url", "HtmlAnchorElement",
+  "IntersectionObserver", "IntersectionObserverEntry", "IntersectionObserverInit",
+] }
+
+
+# --- Abschnitt: weitere Abhaengigkeiten der Bereiche (nur wenn wirklich noetig) -------------------
+
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# Ohne Debug-Infos: kleinere Build-Ordner und schnellere Builds.
+[profile.dev]
+debug = false
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+
+[profile.server-dev]
+inherits = "dev"
+
+[profile.android-dev]
+inherits = "dev"
