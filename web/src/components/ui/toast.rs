@@ -30,28 +30,34 @@ pub enum ToastDirection {
     BottomUp,
 }
 
+/// Eine sichtbare Meldung im [`ToastToaster`].
+#[derive(Clone, PartialEq)]
+struct ToastItem {
+    id: u64,
+    variant: ToastType,
+    title: String,
+}
+
+static TOASTS: GlobalSignal<Vec<ToastItem>> = Signal::global(Vec::new);
+static NEXT_TOAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// So lange bleibt eine Meldung stehen (Laden: bis sie ersetzt oder weggeklickt wird).
+const TOAST_MS: u32 = 4000;
+
+/// Zeigt eine Meldung im [`ToastToaster`] (der einmal im Rahmen stehen muss).
 pub fn show_toast(variant: ToastType, title: impl Into<String>) {
-    let variant = variant.to_string();
-    let title = title.into();
-    let title = serde_json::to_string(&title).unwrap_or_else(|_| "\"Notification\"".to_owned());
-    let js = format!(
-        r#"(() => {{
-            const body = document.body;
-            if (!body) return;
-            const trigger = document.createElement("button");
-            trigger.type = "button";
-            trigger.dataset.name = "ToastTrigger";
-            trigger.dataset.variant = {variant:?};
-            trigger.dataset.toastTitle = {title};
-            trigger.dataset.toastDescription = "";
-            body.appendChild(trigger);
-            trigger.click();
-            trigger.remove();
-        }})()"#
-    );
-    spawn(async move {
-        dioxus::document::eval(&js).await.ok();
-    });
+    let id = NEXT_TOAST.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TOASTS.write().push(ToastItem { id, variant, title: title.into() });
+    if variant != ToastType::Loading {
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(TOAST_MS).await;
+            dismiss_toast(id);
+        });
+    }
+}
+
+fn dismiss_toast(id: u64) {
+    TOASTS.write().retain(|t| t.id != id);
 }
 
 #[component]
@@ -154,10 +160,46 @@ pub fn ToastToaster(#[props(default = ToastPosition::BottomRight)] position: Toa
         ToastPosition::BottomLeft => "left-6 bottom-6",
         ToastPosition::BottomRight => "right-6 bottom-6",
     };
+    let list_class = match direction {
+        ToastDirection::TopDown => "h-auto w-[min(400px,calc(100vw-3rem))]",
+        ToastDirection::BottomUp => "h-auto w-[min(400px,calc(100vw-3rem))] flex-col-reverse",
+    };
 
     rsx! {
         ToastContainer { class: container_class, position,
-            ToastList { position, direction, "" }
+            ToastList { class: list_class, position, direction,
+                for t in TOASTS.read().iter().cloned() {
+                    ToastView { key: "{t.id}", item: t }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ToastView(item: ToastItem) -> Element {
+    let accent = match item.variant {
+        ToastType::Success => "border-l-success",
+        ToastType::Error => "border-l-destructive",
+        ToastType::Warning => "border-l-warning",
+        ToastType::Info => "border-l-info",
+        ToastType::Default | ToastType::Loading => "border-l-primary",
+    };
+    let id = item.id;
+    rsx! {
+        li {
+            "data-name": "Toast",
+            "data-variant": "{item.variant}",
+            role: if item.variant == ToastType::Error { "alert" } else { "status" },
+            class: "flex items-start gap-3 rounded-lg border border-l-4 bg-popover p-4 text-sm text-popover-foreground shadow-lg animate-nrz-toast {accent}",
+            span { class: "flex-1 break-words", "{item.title}" }
+            button {
+                r#type: "button",
+                class: "shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground cursor-pointer [&_svg]:size-4",
+                "aria-label": "Meldung schliessen",
+                onclick: move |_| dismiss_toast(id),
+                icons::X {}
+            }
         }
     }
 }

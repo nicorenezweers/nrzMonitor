@@ -2,7 +2,6 @@
 /web/target
 /web/dist/*
 !/web/dist/.gitkeep
-/web/assets/tailwind.css
 /data
 /dist
 .env

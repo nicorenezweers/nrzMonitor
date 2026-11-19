@@ -66,35 +66,11 @@ pub fn Popover(#[props(default = PopoverAlign::Center)] align: PopoverAlign, chi
         "#{content_id} {{ position: fixed; position-anchor: {anchor_name}; {position_styles} transform-origin: {transform_origin}; }}"
     );
 
-    let tid = trigger_id;
-    let cid = content_id;
-    let script = format!(
-        r"(function() {{
-        const setup = () => {{
-            const trigger = document.getElementById('{tid}');
-            const content = document.getElementById('{cid}');
-            if (!trigger || !content) {{ setTimeout(setup, 50); return; }}
-            if (trigger.hasAttribute('data-popover-init')) return;
-            trigger.setAttribute('data-popover-init', 'true');
-            const close = () => content.setAttribute('data-state', 'closed');
-            trigger.addEventListener('click', e => {{
-                e.stopPropagation();
-                const isOpen = content.getAttribute('data-state') === 'open';
-                content.setAttribute('data-state', isOpen ? 'closed' : 'open');
-            }});
-            document.addEventListener('click', e => {{
-                if (!content.contains(e.target) && e.target !== trigger) close();
-            }});
-            document.addEventListener('keydown', e => {{ if (e.key === 'Escape') close(); }});
-        }};
-        if (document.readyState === 'loading') {{ document.addEventListener('DOMContentLoaded', setup); }} else {{ setup(); }}
-    }})();"
-    );
+    use_effect(move || setup_popover(trigger_id.clone(), content_id.clone()));
 
     rsx! {
         style { dangerous_inner_html: "{css}" }
         {children}
-        script { dangerous_inner_html: "{script}" }
     }
 }
 
@@ -155,4 +131,47 @@ pub fn PopoverTitle(#[props(into, optional)] class: Option<String>, children: El
 pub fn PopoverDescription(#[props(into, optional)] class: Option<String>, children: Element) -> Element {
     let merged = tw_merge!("text-muted-foreground text-sm", class.as_deref().unwrap_or(""));
     rsx! { p { "data-name": "PopoverDescription", class: "{merged}", {children} } }
+}
+
+// Verhalten: Auslöser schaltet um, Klick daneben und Escape schliessen.
+fn setup_popover(tid: String, cid: String) {
+    use super::dom;
+    dom::when_ready(move || {
+        let (Some(trigger), Some(content)) = (dom::by_id(&tid), dom::by_id(&cid)) else { return false };
+        if !dom::init_once(&trigger, "data-popover-init") {
+            return true;
+        }
+        let close = {
+            let c = content.clone();
+            move || {
+                let _ = c.set_attribute("data-state", "closed");
+            }
+        };
+        dom::listen(&trigger, "click", {
+            let c = content.clone();
+            move |e: web_sys::Event| {
+                e.stop_propagation();
+                let _ = c.set_attribute("data-state", if dom::is_open(&c) { "closed" } else { "open" });
+            }
+        });
+        if let Some(doc) = dom::document() {
+            dom::listen(&doc, "click", {
+                let close = close.clone();
+                let trigger_node: web_sys::Node = trigger.clone().into();
+                move |e: web_sys::Event| {
+                    let on_trigger = e.target().and_then(|t| wasm_bindgen::JsCast::dyn_into::<web_sys::Node>(t).ok())
+                        .is_some_and(|n| n.is_same_node(Some(&trigger_node)));
+                    if !dom::contains_target(&content, &e) && !on_trigger {
+                        close();
+                    }
+                }
+            });
+            dom::listen(&doc, "keydown", move |e: web_sys::KeyboardEvent| {
+                if e.key() == "Escape" {
+                    close();
+                }
+            });
+        }
+        true
+    });
 }

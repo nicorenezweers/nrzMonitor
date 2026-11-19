@@ -109,7 +109,7 @@ pub fn SelectContent(
     let (on_scroll, can_scroll_up, can_scroll_down) = use_can_scroll_vertical();
 
     // Class string copied verbatim from leptos SelectContent. The above/below
-    // flip is driven by the `data-position` attribute, which the inline script
+    // flip is driven by the `data-position` attribute, which `setup_select`
     // recomputes on open (dioxus port of leptos's `updatePosition`).
     let merged = tw_merge!(
         "w-[150px] overflow-auto z-50 p-1 rounded-md border bg-card shadow-md h-fit max-h-[300px] absolute top-[calc(100%+4px)] left-0 data-[position=Above]:top-auto data-[position=Above]:bottom-[calc(100%+4px)] transition-all duration-200 data-[state=closed]:opacity-0 data-[state=closed]:scale-95 data-[state=open]:opacity-100 data-[state=open]:scale-100 data-[state=closed]:data-[position=Below]:origin-top data-[state=open]:data-[position=Below]:origin-top data-[state=closed]:data-[position=Above]:origin-bottom data-[state=open]:data-[position=Above]:origin-bottom [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
@@ -117,61 +117,7 @@ pub fn SelectContent(
     );
 
     let target_id = ctx.target_id.clone();
-    // Large inline JS template with trailing named args; inlining every `{tid}`
-    // into the format string would not improve readability.
-    #[allow(clippy::uninlined_format_args)]
-    let script = format!(
-        r#"(function() {{
-            const setup = () => {{
-                const content = document.querySelector('#{tid}');
-                const trigger = document.querySelector('[data-select-trigger="{tid}"]');
-                if (!content || !trigger) {{ setTimeout(setup, 50); return; }}
-                if (content.hasAttribute('data-initialized')) return;
-                content.setAttribute('data-initialized', 'true');
-                let isOpen = false;
-                const updatePosition = () => {{
-                    const r = trigger.getBoundingClientRect();
-                    const spaceBelow = window.innerHeight - r.bottom;
-                    const spaceAbove = r.top;
-                    if (spaceBelow < 200 && spaceAbove > spaceBelow) content.setAttribute('data-position', 'Above');
-                    else content.setAttribute('data-position', 'Below');
-                    content.style.minWidth = r.width + 'px';
-                }};
-                const open = () => {{
-                    isOpen = true;
-                    updatePosition();
-                    content.setAttribute('data-state', 'open');
-                    content.style.pointerEvents = 'auto';
-                    content.dispatchEvent(new Event('scroll'));
-                    if (window.ScrollLock) window.ScrollLock.lock();
-                    setTimeout(() => document.addEventListener('click', onClickOutside), 0);
-                }};
-                const close = () => {{
-                    isOpen = false;
-                    content.setAttribute('data-state', 'closed');
-                    content.style.pointerEvents = 'none';
-                    document.removeEventListener('click', onClickOutside);
-                    if (window.ScrollLock) window.ScrollLock.unlock(200);
-                }};
-                const onClickOutside = (e) => {{
-                    if (!content.contains(e.target) && !trigger.contains(e.target)) close();
-                }};
-                trigger.addEventListener('click', (e) => {{
-                    e.stopPropagation();
-                    if (isOpen) close(); else open();
-                }});
-                content.querySelectorAll('[data-select-option]').forEach(opt => {{
-                    opt.addEventListener('click', () => close());
-                }});
-                document.addEventListener('keydown', (e) => {{
-                    if (e.key === 'Escape' && isOpen) {{ e.preventDefault(); close(); }}
-                }});
-            }};
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup);
-            else setup();
-        }})();"#,
-        tid = target_id,
-    );
+    use_effect(move || setup_select(target_id.clone()));
 
     rsx! {
         div {
@@ -193,7 +139,6 @@ pub fn SelectContent(
                 ChevronDown { class: "size-4 text-muted-foreground" }
             }
         }
-        script { dangerous_inner_html: "{script}" }
     }
 }
 
@@ -258,4 +203,87 @@ pub fn SelectOption(
             Check { class: "ml-auto opacity-0 size-4 text-muted-foreground group-aria-selected:opacity-100" }
         }
     }
+}
+
+/* ========================================================== */
+/*                   ✨ VERHALTEN ✨                          */
+/* ========================================================== */
+
+// Öffnen/Schliessen über den Auslöser, Klick daneben, Auswahl und Escape; klappt nach oben,
+// wenn unten zu wenig Platz ist.
+fn setup_select(tid: String) {
+    use super::dom;
+    use std::{cell::RefCell, rc::Rc};
+
+    dom::when_ready(move || {
+        let trigger_sel = format!("[data-select-trigger=\"{tid}\"]");
+        let (Some(content), Some(trigger)) = (dom::by_id(&tid), dom::query(&trigger_sel)) else { return false };
+        if !dom::init_once(&content, "data-initialized") {
+            return true;
+        }
+        let Some(doc) = dom::document() else { return true };
+        // offen? + gebundener Klick-daneben-Rückruf
+        let state: Rc<RefCell<Option<js_sys::Function>>> = Rc::default();
+
+        let close: Rc<dyn Fn()> = {
+            let (c, state, doc) = (content.clone(), state.clone(), doc.clone());
+            Rc::new(move || {
+                dom::set_open(&[&c], false);
+                if let Some(f) = state.borrow_mut().take() {
+                    dom::unlisten(&doc, "click", &f);
+                }
+            })
+        };
+        let open: Rc<dyn Fn()> = {
+            let (c, t, state, doc, close) = (content.clone(), trigger.clone(), state.clone(), doc.clone(), close.clone());
+            Rc::new(move || {
+                let r = t.get_bounding_client_rect();
+                let vh = web_sys::window().and_then(|w| w.inner_height().ok()).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let below = vh - r.bottom();
+                let above = r.top();
+                let _ = c.set_attribute("data-position", if below < 200.0 && above > below { "Above" } else { "Below" });
+                dom::set_style(&c, "min-width", &format!("{}px", r.width()));
+                dom::set_open(&[&c], true);
+                if let Ok(ev) = web_sys::Event::new("scroll") {
+                    let _ = c.dispatch_event(&ev);
+                }
+                let (c2, t2, state2, doc2, close2) = (c.clone(), t.clone(), state.clone(), doc.clone(), close.clone());
+                dom::later(0, move || {
+                    // nur binden, wenn inzwischen nicht schon wieder geschlossen
+                    if !dom::is_open(&c2) || state2.borrow().is_some() {
+                        return;
+                    }
+                    let f = dom::listen(&doc2, "click", move |e: web_sys::Event| {
+                        if !dom::contains_target(&c2, &e) && !dom::contains_target(&t2, &e) {
+                            close2();
+                        }
+                    });
+                    *state2.borrow_mut() = Some(f);
+                });
+            })
+        };
+        dom::listen(&trigger, "click", {
+            let (c, open, close) = (content.clone(), open.clone(), close.clone());
+            move |e: web_sys::Event| {
+                e.stop_propagation();
+                if dom::is_open(&c) { close() } else { open() }
+            }
+        });
+        // auch für später eingefügte Optionen: Klick auf eine Option schliesst
+        dom::listen(&content, "click", {
+            let close = close.clone();
+            move |e: web_sys::Event| {
+                if dom::target_element(&e).and_then(|t| t.closest("[data-select-option]").ok().flatten()).is_some() {
+                    close();
+                }
+            }
+        });
+        dom::listen(&doc, "keydown", move |e: web_sys::KeyboardEvent| {
+            if e.key() == "Escape" && dom::is_open(&content) {
+                e.prevent_default();
+                close();
+            }
+        });
+        true
+    });
 }

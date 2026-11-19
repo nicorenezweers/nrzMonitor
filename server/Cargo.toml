@@ -50,6 +50,11 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 webpki-roots = "1"
 
 
+# --- Abschnitt: MCP -------------------------------------------------------------------------------
+# Interne Aufrufe der eigenen API (Router als Dienst) – steckt ueber axum schon im Lockfile.
+tower = { version = "0.5", features = ["util"] }
+
+
 [lints.clippy]
 dbg_macro = "deny"
 todo = "deny"

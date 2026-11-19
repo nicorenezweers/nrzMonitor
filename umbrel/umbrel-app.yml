@@ -2,7 +2,7 @@ manifestVersion: 1
 id: nrz-monitor
 category: networking
 name: nrzMonitor
-version: "1.0.0"
+version: "1.1.0"
 tagline: "Ueberwachung wie Netdata: Host, jeder Container, DNS, Cloudflare und NetBird - live und sparsam"
 icon: http://100.78.107.162:8390/nicorenezweers/nrzStore/raw/branch/main/nrz-monitor/icon.png
 port: 8570
@@ -11,9 +11,9 @@ description: >-
   nrzMonitor ueberwacht dein Geraet wie Netdata und Grafana - komplett in Rust,
   im nrz-Design, mit DuckDB als sparsamem Speicher.
 releaseNotes: >-
-  Neu: Seite Strom - aktuelle Leistung (RAPL plus Grundlast und Netzteilverlust),
-  Verlauf, Energie in kWh und Kosten je Stunde, Tag, Monat und Jahr. Strompreis in
-  Cent je kWh mit Gueltig-ab-Zeitpunkt, auch rueckwirkend; Kosten werden neu gerechnet.
+  Neu: MCP-Server fuer KI-Programme und externe Dashboards - Live-Werte, Zeitreihen,
+  Ereignisse, Container mit Logs, Alarme, DNS, Strom und Speicher; dazu Live-Strom (SSE)
+  und REST-API mit eigenem Schluessel unter /mcp. Siehe Einstellungen -> MCP.
 developer: nrz
 website: http://100.78.107.162:8390/nicorenezweers/nrzMonitor
 submitter: nrz

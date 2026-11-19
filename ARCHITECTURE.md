@@ -13,7 +13,8 @@ ganz und hält sich an Besitz, Schnittstellen und Regeln – dann passen die Tei
 shared/     nrzmon-shared   Typen für Server UND Oberfläche: API, Metrik-Modell, Katalog (nur serde)
 server/     nrzmon-server   Programm `nrzmonitor`: Sammler, DuckDB-Speicher, HTTP-API, liefert die Oberfläche aus
 web/        nrzmon-web      Oberfläche: Dioxus 0.7 (WASM, nur Client), nrzUI-Bausteine, eigener Cargo-Workspace
-scripts/    dev.sh, run-linux.sh, shot.sh, build-web.sh, umbrel-release.sh
+web/style/  nrzmon-style    Stylesheet: erzeugt beim Bauen das CSS aus den Klassen im Quelltext (ersetzt Tailwind)
+xtask/      Befehle (`cargo xtask`): build-web, dev, run-linux, shot, docker-image, umbrel-release
 umbrel/     Paket für den nrzStore (docker-compose im Host-Modus, Manifest, hooks/pre-start)
 ```
 
@@ -40,8 +41,9 @@ und im Abschlussbericht nennen.
 | **2 System** | `collectors/system/**`, `api/system.rs` | `system.rs`, `catalog/system.rs` | `pages/system/**` |
 | **3 Docker & Alarme** | `collectors/docker/**`, `alerts/**`, `api/docker.rs`, `api/alerts.rs` | `docker.rs`, `alerts.rs`, `catalog/docker.rs` | `pages/docker/**`, `pages/alerts.rs` |
 | **4 Netzwerk-Integrationen** | `collectors/{dns,cloudflare,netbird,probes}/**`, `api/dns.rs`, `api/integrations.rs` | `dns.rs`, `cloudflare.rs`, `netbird.rs`, `probes.rs`, `catalog/{dns,cloudflare,netbird,probes}.rs` | `pages/dns/**`, `pages/cloudflare.rs`, `pages/netbird.rs`, `pages/probes.rs`, `pages/integrations.rs` |
+| **MCP** | `mcp/**`, `api/mcp.rs` | `mcp.rs` | `pages/mcp.rs` |
 | **Strom** | `collectors/power.rs`, `api/power.rs` | `power.rs`, `catalog/power.rs` | `pages/power.rs` |
-| **5 Oberfläche** | – | – | `components/chart/**`, `components/widgets.rs`, `components/layout.rs`, `pages/overview.rs`, `pages/metrics.rs`, `pages/settings.rs`, `tailwind.css`, `route.rs` (Aufbau) |
+| **5 Oberfläche** | – | – | `components/chart/**`, `components/widgets.rs`, `components/layout.rs`, `pages/overview.rs`, `pages/metrics.rs`, `pages/settings.rs`, `style/**` (CSS-Erzeuger, nrz-Thema), `route.rs` (Aufbau) |
 
 Gemeinsam genutzte Dateien mit **markierten Abschnitten** (nur im eigenen Abschnitt ergänzen, nichts umsortieren):
 
@@ -198,6 +200,26 @@ NVMe), ~80 Container; zusätzlich arm64.
 | `NRZMON_PASSWORD` | – | Anmeldung verlangen |
 | `NRZMON_WEB_DIR` | – | Oberfläche aus Ordner statt eingebaut |
 | `NRZMON_DB_MEMORY` / `_THREADS` | `256MB` / `2` | DuckDB klein halten |
+| `NRZMON_MCP_TOKEN` | erzeugt | Schlüssel für `/mcp` (sonst in den Einstellungen) |
+| `NRZMON_MCP_WRITE` | aus | MCP darf auch ändern |
+| `NRZMON_MCP_URL` | aus `NRZMON_BIND` | Ziel der stdio-Brücke `nrzmonitor mcp` |
+
+### MCP und Dashboards
+
+`server/src/mcp/` bietet alles, was die API kann, nach aussen an – mit eigenem Schlüssel (`settings.json`,
+Schlüssel `mcp`, beim ersten Start erzeugt; `NRZMON_MCP_TOKEN` hat Vorrang). Das Passwort der Oberfläche
+ersetzt ihn nur, wenn `NRZMON_PASSWORD` gesetzt ist. Unter umbrelOS lässt der App-Proxy `/mcp*` ohne
+umbrelOS-Anmeldung durch (`PROXY_AUTH_WHITELIST`); andere Container erreichen `http://10.21.0.1:8571/mcp`.
+
+| Pfad | Zweck |
+|---|---|
+| `POST/GET/DELETE /mcp` | MCP „Streamable HTTP“ (2025-06-18, auch 2025-03-26/2024-11-05): Werkzeuge, Ressourcen mit Abo, Prompts, Logging, Vervollständigung |
+| `GET /mcp/stream` | Server-Sent Events für Dashboards: `hello`, `latest`, `tick`, `snap`, `event`, `catalog` |
+| `/mcp/api/v1/…` | die ganze REST-API mit dem Schlüssel (ändernd nur mit `allow_write`) |
+| `nrzmonitor mcp` | Brücke stdin/stdout → `/mcp` (`docker exec -i … nrzmonitor mcp`) |
+
+Werkzeuge rufen intern dieselben Routen auf (`api::routes()` ohne Anmeldung) – neue Endpunkte eines Bereichs
+sind damit über `api_request` und `/mcp/api/v1` sofort erreichbar. Eigene Werkzeuge: `mcp/tools.rs` (`defs()` + `run()`).
 
 ## 6. Oberfläche: Regeln
 
@@ -206,11 +228,22 @@ NVMe), ~80 Container; zusätzlich arm64.
   Farben** (`bg-neutral-900`, `#141414`, `text-red-400`). Farbe nur für Zustände: `success`, `warning`,
   `destructive`, `info` – und für Datenreihen (siehe unten).
 - Texte **Deutsch**, Schweizer Schreibweise (ss statt ß), kurz und konkret. Code-Kommentare deutsch.
+- **Alles Rust**: keine CSS-, JavaScript- oder Shell-Dateien und kein Dockerfile anlegen (Ausnahme:
+  `umbrel/hooks/pre-start`, den umbrelOS als Shell-Skript verlangt). Klassen schreibt man wie bei
+  Tailwind v4 (`flex`, `gap-4`, `hover:bg-accent`, `sm:grid-cols-2`, `[&_svg]:size-4` …); das CSS dazu erzeugt
+  `web/style` beim Bauen (`build.rs`) aus allen Klassen in `web/src`. Klassen immer vollständig hinschreiben,
+  nicht zusammensetzen (`format!("p-{n}")` findet der Erzeuger nicht). Kennt er eine Klasse in `class: "…"`
+  nicht, schlägt `(cd web && cargo test -p nrzmon-style)` fehl („Klassen ohne CSS“, `cargo check` warnt) –
+  dann in `web/style/src/utilities.rs` ergänzen. Farben, Radius und Schrift des Themas stehen in
+  `web/style/src/theme.rs`.
 - Seitenaufbau immer mit den nrzUI-Bausteinen aus `components/ui/app_shell.rs`: `PageContainer`
   (`width: PageWidth::Full` für Diagrammseiten), `PageHeader`, `PageSection`, `SettingsGroup`,
   `SettingsRow`, `EmptyState`, `LoadingState`. Weitere Bausteine in `components/ui/` (Button, Card, Badge,
   Input, Select, Switch, Tabs, Table, Tooltip, Dialog, Sheet, Popover, DropdownMenu, Command, Toast,
   Skeleton, Progress, Checkbox, Pagination …) – benutzen statt nachbauen, nicht verändern.
+  Ihr Verhalten (Öffnen, Schliessen, Tastatur) richten sie mit den Helfern in `components/ui/dom.rs` ein,
+  feste Regeln dazu stehen in `web/style/src/base.rs` (`NRZ_UI`). Meldungen mit `toast::show_toast` – der
+  `ToastToaster` steht einmal in `layout.rs`.
 - Grössen: Seitentitel `text-2xl font-semibold`, Text `text-sm`, Hinweise `text-xs text-muted-foreground`,
   Zahlen `tabular-nums`, Karten `rounded-xl border bg-card shadow-sm`, Abstände `gap-4`/`gap-6`.
 - Jede Seite muss am Handy (375 px) und am Desktop (1600 px) gut aussehen.
@@ -268,14 +301,16 @@ Momentaufnahmen, Details per Klick. Einstellungen eines Bereichs: als Komponente
 ## 8. Entwickeln und Prüfen
 
 ```bash
-scripts/dev.sh                          # Mac: Oberfläche bauen + Server mit Beispieldaten, http://127.0.0.1:8571
-NRZMON_PORT=8602 scripts/dev.sh         # eigener Port (jeder Bereich hat seinen, siehe Auftrag)
+cargo xtask dev                         # Mac: Oberfläche bauen + Server mit Beispieldaten, http://127.0.0.1:8571
+NRZMON_PORT=8602 cargo xtask dev        # eigener Port (jeder Bereich hat seinen, siehe Auftrag)
 (cd web && ~/.cargo/bin/dx build --platform web)   # Oberfläche neu bauen, Seite neu laden
-scripts/run-linux.sh                    # echte Sammler: Linux-Build im Container im Host-Modus (Docker-VM)
-scripts/shot.sh /system/cpu /tmp/cpu.png 1600 1100 8602    # Bildschirmfoto (Headless-Chrome im Docker)
-scripts/shot.sh /system/cpu /tmp/cpu-m.png 390 844 8602    # Handy
+cargo xtask run-linux                   # echte Sammler: Linux-Build im Container im Host-Modus (Docker-VM)
+cargo xtask shot /system/cpu /tmp/cpu.png 1600 1100 8602    # Bildschirmfoto (Headless-Chrome im Docker)
+cargo xtask shot /system/cpu /tmp/cpu-m.png 390 844 8602    # Handy
+cargo xtask build-web                   # Oberfläche für die Auslieferung nach web/dist (wird eingebettet)
 cargo test -p nrzmon-server -p nrzmon-shared
 (cd web && cargo test --target "$(rustc -vV | sed -n 's/host: //p')")   # Rechenteil der Oberfläche
+(cd web && cargo test -p nrzmon-style)  # CSS-Erzeuger, prüft auch: jede Klasse in class: "…" ergibt CSS
 cargo clippy -p nrzmon-server -p nrzmon-shared --no-deps
 ```
 

@@ -16,13 +16,15 @@ pub mod base;
 pub mod dns;
 pub mod docker;
 pub mod integrations;
+pub mod mcp;
 pub mod power;
 pub mod query;
 pub mod storage;
 pub mod system;
 
-pub fn router(core: Core) -> Router {
-    let api = Router::new()
+/// Alle Routen unter `/api/v1`, noch ohne Anmeldung (die setzt [`router`] davor; MCP ruft sie intern auf).
+pub fn routes() -> Router<Core> {
+    Router::new()
         .merge(base::routes())
         .merge(query::routes())
         .merge(storage::routes())
@@ -32,8 +34,19 @@ pub fn router(core: Core) -> Router {
         .merge(dns::routes())
         .merge(integrations::routes())
         .merge(power::routes())
-        .layer(middleware::from_fn_with_state(core.clone(), auth::require));
-    Router::new().nest("/api/v1", api).fallback(web::serve).layer(CompressionLayer::new()).with_state(core)
+        .merge(mcp::routes())
+}
+
+pub fn router(core: Core) -> Router {
+    let api = routes().layer(middleware::from_fn_with_state(core.clone(), auth::require));
+    // Für MCP: dieselbe API ohne Anmeldung (MCP prüft seinen eigenen Schlüssel).
+    let internal = Router::new().nest("/api/v1", routes()).with_state(core.clone());
+    Router::new()
+        .nest("/api/v1", api)
+        .merge(crate::mcp::routes(&core, internal))
+        .fallback(web::serve)
+        .layer(CompressionLayer::new())
+        .with_state(core)
 }
 
 /// Fehlerantwort: Statuscode und `{"error": "…"}`.

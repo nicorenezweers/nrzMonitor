@@ -17,7 +17,7 @@ use crate::{
     api,
     components::{
         chart::{ChartDialog, expand, marks::MarksSource, nav},
-        ui::{app_shell::*, kbd::Kbd},
+        ui::{app_shell::*, kbd::Kbd, toast::ToastToaster},
     },
     fmt,
     live::{use_connected, use_snap},
@@ -224,6 +224,7 @@ pub fn Shell() -> Element {
         MarksSource {}
         ChartDialog {}
         CommandPalette {}
+        ToastToaster {}
     }
 }
 

@@ -5,6 +5,6 @@ name = "nrzmon-web"
 title = "nrzMonitor"
 
 # `dx serve` (Port 8080) reicht API-Aufrufe an den Server weiter. Der Live-Kanal (WebSocket) geht
-# darueber nicht zuverlaessig – fuer die Entwicklung besser `scripts/dev.sh` (Server liefert die Oberflaeche aus).
+# darueber nicht zuverlaessig – fuer die Entwicklung besser `cargo xtask dev` (Server liefert die Oberflaeche aus).
 [[web.proxy]]
 backend = "http://127.0.0.1:8571/api/"

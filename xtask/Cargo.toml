@@ -1,0 +1,12 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "nrzMonitor – Entwicklungs- und Release-Befehle (`cargo xtask`)"
+
+[dependencies]
+anyhow = "1"
+flate2 = "1"
+sha2 = "0.11"

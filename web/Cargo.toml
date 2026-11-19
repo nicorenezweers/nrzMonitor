@@ -1,6 +1,6 @@
 [package]
 name = "nrzmon-web"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 license = "MIT"
 publish = false
@@ -28,11 +28,16 @@ web-sys = { version = "0.3", features = [
   "Clipboard", "MediaQueryList", "ScrollIntoViewOptions", "ScrollBehavior", "ScrollLogicalPosition",
   "Node", "NodeList", "CssStyleDeclaration", "Blob", "BlobPropertyBag", "Url", "HtmlAnchorElement",
   "IntersectionObserver", "IntersectionObserverEntry", "IntersectionObserverInit",
+  "MutationObserver", "MutationObserverInit", "MutationRecord", "ScrollToOptions",
 ] }
 
 
 # --- Abschnitt: weitere Abhaengigkeiten der Bereiche (nur wenn wirklich noetig) -------------------
 
+
+# Stylesheet: build.rs erzeugt das CSS aus den Klassen im Quelltext (siehe style/)
+[build-dependencies]
+nrzmon-style = { path = "style" }
 
 [profile.release]
 opt-level = "z"

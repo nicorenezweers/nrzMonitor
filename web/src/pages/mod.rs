@@ -8,6 +8,7 @@ pub mod events;
 pub mod explore;
 pub mod integrations;
 pub mod login;
+pub mod mcp;
 pub mod metrics;
 pub mod netbird;
 pub mod overview;

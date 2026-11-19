@@ -1,4 +1,4 @@
-//! Liefert die Oberfläche aus: im Programm eingebaut (`web/dist`, gebaut mit `scripts/build-web.sh`)
+//! Liefert die Oberfläche aus: im Programm eingebaut (`web/dist`, gebaut mit `cargo xtask build-web`)
 //! oder aus einem Ordner (`NRZMON_WEB_DIR`). Vorkomprimierte `.gz`-Dateien werden bevorzugt.
 
 use std::borrow::Cow;
@@ -84,7 +84,7 @@ fn placeholder() -> Response {
     let html = "<!doctype html><html lang=\"de\" class=\"dark\"><meta charset=\"utf-8\"><title>nrzMonitor</title>\
         <body style=\"background:#1a1a1a;color:#eee;font-family:system-ui;padding:3rem\">\
         <h1>nrzMonitor</h1><p>Der Server läuft, aber die Oberfläche ist nicht eingebaut.</p>\
-        <p>Bauen: <code>scripts/build-web.sh</code> – oder für die Entwicklung <code>cd web &amp;&amp; dx serve</code>.</p>\
+        <p>Bauen: <code>cargo xtask build-web</code> – oder für die Entwicklung <code>cd web &amp;&amp; dx serve</code>.</p>\
         <p>API: <a style=\"color:#eee\" href=\"/api/v1/info\">/api/v1/info</a></p></body></html>";
     ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html).into_response()
 }

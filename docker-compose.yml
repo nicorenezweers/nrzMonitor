@@ -13,6 +13,8 @@ services:
       TZ: Europe/Zurich
       # NRZMON_PASSWORD: "geheim"          # Anmeldung verlangen
       # NRZMON_DNS_MCP_TOKEN: "..."        # oder in der Oberflaeche eintragen
+      # NRZMON_MCP_TOKEN: "..."            # eigener MCP-Schluessel (sonst erzeugt, siehe Einstellungen)
+      # NRZMON_MCP_WRITE: "1"              # MCP darf auch aendern (Einstellungen, Alarmregeln)
     volumes:
       - ./data:/data
       - /proc:/host/proc:ro

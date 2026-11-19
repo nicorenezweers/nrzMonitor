@@ -1,0 +1,10 @@
+[package]
+name = "nrzmon-style"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "nrzMonitor – Stylesheet der Oberflaeche: Tailwind-kompatible Klassen, in Rust erzeugt"
+
+# Keine Abhaengigkeiten: wird von build.rs der Oberflaeche benutzt und muss schnell bauen.
+[dependencies]

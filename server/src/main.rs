@@ -12,6 +12,7 @@ mod core;
 mod db;
 mod frame;
 mod live;
+mod mcp;
 mod registry;
 mod ring;
 mod settings;
@@ -34,6 +35,11 @@ fn main() -> anyhow::Result<()> {
         }
         let ok = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3)).is_ok();
         std::process::exit(i32::from(!ok));
+    }
+
+    if std::env::args().nth(1).as_deref() == Some("mcp") {
+        // MCP über stdin/stdout (z. B. `docker exec -i nrzmonitor nrzmonitor mcp`).
+        return mcp::stdio(cfg);
     }
 
     tracing_subscriber::fmt()

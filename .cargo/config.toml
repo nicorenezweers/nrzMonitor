@@ -1,4 +1,8 @@
-# Linux: libduckdb.so liegt neben dem Programm (siehe scripts/umbrel-release.sh und Dockerfile).
+# Entwicklungs- und Release-Befehle: `cargo xtask` (Hilfe), z. B. `cargo xtask dev`.
+[alias]
+xtask = "run --quiet --package xtask --"
+
+# Linux: libduckdb.so liegt neben dem Programm (siehe `cargo xtask umbrel-release` und `cargo xtask docker-image`).
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN"]
 

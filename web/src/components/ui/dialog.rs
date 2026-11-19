@@ -3,6 +3,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use dioxus::prelude::*;
 use icons::X;
 use tw_merge::tw_merge;
+use web_sys::KeyboardEvent;
+
+use super::dom;
 
 static DIALOG_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -87,63 +90,7 @@ pub fn DialogContent(
 
     let tid = target_id.clone();
     let bid = backdrop_id.clone();
-    let script = format!(
-        r#"
-        (function() {{
-            const setupDialog = () => {{
-                const dialog = document.querySelector('#{tid}');
-                const backdrop = document.querySelector('#{bid}');
-                const trigger = document.querySelector('[data-dialog-trigger="{tid}"]');
-
-                if (!dialog || !backdrop || !trigger) {{
-                    setTimeout(setupDialog, 50);
-                    return;
-                }}
-
-                if (dialog.hasAttribute('data-initialized')) return;
-                dialog.setAttribute('data-initialized', 'true');
-
-                const openDialog = () => {{
-                    if (window.ScrollLock) window.ScrollLock.lock();
-                    dialog.setAttribute('data-state', 'open');
-                    backdrop.setAttribute('data-state', 'open');
-                    dialog.style.pointerEvents = 'auto';
-                    backdrop.style.pointerEvents = 'auto';
-                }};
-
-                const closeDialog = () => {{
-                    dialog.setAttribute('data-state', 'closed');
-                    backdrop.setAttribute('data-state', 'closed');
-                    dialog.style.pointerEvents = 'none';
-                    backdrop.style.pointerEvents = 'none';
-                    if (window.ScrollLock) window.ScrollLock.unlock(200);
-                }};
-
-                trigger.addEventListener('click', openDialog);
-
-                const closeButtons = dialog.querySelectorAll('[data-dialog-close]');
-                closeButtons.forEach(btn => btn.addEventListener('click', closeDialog));
-
-                backdrop.addEventListener('click', () => {{
-                    if (dialog.getAttribute('data-backdrop') === 'auto') closeDialog();
-                }});
-
-                document.addEventListener('keydown', (e) => {{
-                    if (e.key === 'Escape' && dialog.getAttribute('data-state') === 'open') {{
-                        e.preventDefault();
-                        closeDialog();
-                    }}
-                }});
-            }};
-
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', setupDialog);
-            }} else {{
-                setupDialog();
-            }}
-        }})();
-        "#
-    );
+    use_effect(move || setup_dialog(tid.clone(), bid.clone()));
 
     rsx! {
         // Backdrop
@@ -172,8 +119,6 @@ pub fn DialogContent(
             }
             {children}
         }
-        // Setup script
-        script { dangerous_inner_html: "{script}" }
     }
 }
 
@@ -247,4 +192,50 @@ pub fn DialogBody(#[props(into, optional)] class: Option<String>, children: Elem
 pub fn DialogFooter(#[props(into, optional)] class: Option<String>, children: Element) -> Element {
     let merged = tw_merge!("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", class.as_deref().unwrap_or(""));
     rsx! { footer { class: "{merged}", {children} } }
+}
+
+// ---------------------------------------------------------------------------
+// Verhalten: öffnen über den Auslöser, schliessen über Knöpfe, Hintergrund und Escape
+// ---------------------------------------------------------------------------
+
+fn setup_dialog(tid: String, bid: String) {
+    dom::when_ready(move || {
+        let trigger_sel = format!("[data-dialog-trigger=\"{tid}\"]");
+        let (Some(dialog), Some(backdrop), Some(trigger)) = (dom::by_id(&tid), dom::by_id(&bid), dom::query(&trigger_sel))
+        else {
+            return false;
+        };
+        if !dom::init_once(&dialog, "data-initialized") {
+            return true;
+        }
+        let set = {
+            let (d, b) = (dialog.clone(), backdrop.clone());
+            move |open: bool| dom::set_open(&[&d, &b], open)
+        };
+        dom::listen(&trigger, "click", {
+            let set = set.clone();
+            move |_: web_sys::Event| set(true)
+        });
+        for btn in dom::query_all(&dialog, "[data-dialog-close]") {
+            let set = set.clone();
+            dom::listen(&btn, "click", move |_: web_sys::Event| set(false));
+        }
+        dom::listen(&backdrop, "click", {
+            let (set, d) = (set.clone(), dialog.clone());
+            move |_: web_sys::Event| {
+                if d.get_attribute("data-backdrop").as_deref() == Some("auto") {
+                    set(false);
+                }
+            }
+        });
+        if let Some(doc) = dom::document() {
+            dom::listen(&doc, "keydown", move |e: KeyboardEvent| {
+                if e.key() == "Escape" && dom::is_open(&dialog) {
+                    e.prevent_default();
+                    set(false);
+                }
+            });
+        }
+        true
+    });
 }

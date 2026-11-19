@@ -46,26 +46,6 @@ pub fn DropdownMenu(
 
     rsx! {
         div { "data-name": "DropdownMenu",
-            style { r#"
-                .dropdown__menu_sub_content {{
-                    position: absolute;
-                    inset-inline-start: calc(100% + 8px);
-                    inset-block-start: -4px;
-                    z-index: 100;
-                    min-inline-size: 160px;
-                    opacity: 0;
-                    visibility: hidden;
-                    transform: translateX(-8px);
-                    transition: all 0.2s ease-out;
-                    pointer-events: none;
-                }}
-                .dropdown__menu_sub_trigger:hover .dropdown__menu_sub_content {{
-                    opacity: 1;
-                    visibility: visible;
-                    transform: translateX(0);
-                    pointer-events: auto;
-                }}
-            "# }
             {children}
         }
     }
@@ -116,118 +96,21 @@ pub fn DropdownMenuContent(
         class.as_deref().unwrap_or("")
     );
 
-    let align_for_script = match ctx.align {
+    let align_attr = match ctx.align {
         DropdownMenuAlign::Start => "start",
         DropdownMenuAlign::StartOuter => "start-outer",
         DropdownMenuAlign::End => "end",
         DropdownMenuAlign::EndOuter => "end-outer",
         DropdownMenuAlign::Center => "center",
     };
-    let position_for_script = match position {
+    let position_attr = match position {
         DropdownMenuPosition::Auto => "auto",
         DropdownMenuPosition::Top => "top",
         DropdownMenuPosition::Bottom => "bottom",
     };
     let target_id = ctx.target_id;
-
-    // Large inline JS template with trailing named args; inlining every `{tid}`
-    // into the format string would not improve readability.
-    #[allow(clippy::uninlined_format_args)]
-    let script = format!(
-        r#"(function() {{
-            const setupDropdown = () => {{
-                const dropdown = document.querySelector('#{tid}');
-                const trigger = document.querySelector('[data-dropdown-trigger="{tid}"]');
-                if (!dropdown || !trigger) {{ setTimeout(setupDropdown, 50); return; }}
-                if (dropdown.hasAttribute('data-initialized')) return;
-                dropdown.setAttribute('data-initialized', 'true');
-                let isOpen = false;
-                const updatePosition = () => {{
-                    const triggerEl = getComputedStyle(trigger).display === 'contents' ? trigger.firstElementChild : trigger;
-                    const triggerRect = triggerEl.getBoundingClientRect();
-                    const dropdownRect = dropdown.getBoundingClientRect();
-                    const viewportHeight = window.innerHeight;
-                    const spaceBelow = viewportHeight - triggerRect.bottom;
-                    const spaceAbove = triggerRect.top;
-                    const align = dropdown.getAttribute('data-align') || 'start';
-                    const position = dropdown.getAttribute('data-position') || 'auto';
-                    let shouldPositionAbove = false;
-                    if (position === 'top') {{ shouldPositionAbove = true; }}
-                    else if (position === 'bottom') {{ shouldPositionAbove = false; }}
-                    else {{ shouldPositionAbove = spaceAbove >= dropdownRect.height && spaceBelow < dropdownRect.height; }}
-                    switch (align) {{
-                        case 'start':
-                            dropdown.style.top = shouldPositionAbove ? `${{triggerRect.top - dropdownRect.height - 6}}px` : `${{triggerRect.bottom + 6}}px`;
-                            dropdown.style.left = `${{triggerRect.left}}px`;
-                            dropdown.style.transformOrigin = shouldPositionAbove ? 'left bottom' : 'left top';
-                            break;
-                        case 'end':
-                            dropdown.style.top = shouldPositionAbove ? `${{triggerRect.top - dropdownRect.height - 6}}px` : `${{triggerRect.bottom + 6}}px`;
-                            dropdown.style.left = `${{triggerRect.right - dropdownRect.width}}px`;
-                            dropdown.style.transformOrigin = shouldPositionAbove ? 'right bottom' : 'right top';
-                            break;
-                        case 'start-outer':
-                            dropdown.style.top = shouldPositionAbove ? `${{triggerRect.top - dropdownRect.height - 6}}px` : `${{triggerRect.top}}px`;
-                            dropdown.style.left = `${{triggerRect.left - dropdownRect.width - 16}}px`;
-                            dropdown.style.transformOrigin = shouldPositionAbove ? 'right bottom' : 'right top';
-                            break;
-                        case 'end-outer':
-                            dropdown.style.top = shouldPositionAbove ? `${{triggerRect.top - dropdownRect.height - 6}}px` : `${{triggerRect.top}}px`;
-                            dropdown.style.left = `${{triggerRect.right + 8}}px`;
-                            dropdown.style.transformOrigin = shouldPositionAbove ? 'left bottom' : 'left top';
-                            break;
-                        case 'center':
-                            dropdown.style.top = shouldPositionAbove ? `${{triggerRect.top - dropdownRect.height - 6}}px` : `${{triggerRect.bottom + 6}}px`;
-                            dropdown.style.left = `${{triggerRect.left}}px`;
-                            dropdown.style.minWidth = `${{triggerRect.width}}px`;
-                            dropdown.style.transformOrigin = shouldPositionAbove ? 'center bottom' : 'center top';
-                            break;
-                    }}
-                }};
-                const closeDropdown = () => {{
-                    isOpen = false;
-                    dropdown.setAttribute('data-state', 'closed');
-                    dropdown.style.pointerEvents = 'none';
-                    document.removeEventListener('click', handleClickOutside);
-                    if (window.ScrollLock) window.ScrollLock.unlock(200);
-                }};
-                const handleClickOutside = (e) => {{
-                    if (!dropdown.contains(e.target) && !trigger.contains(e.target)) {{ closeDropdown(); }}
-                }};
-                const openDropdown = () => {{
-                    isOpen = true;
-                    dropdown.setAttribute('data-state', 'open');
-                    dropdown.style.visibility = 'hidden';
-                    dropdown.style.pointerEvents = 'auto';
-                    dropdown.offsetHeight;
-                    updatePosition();
-                    dropdown.style.visibility = 'visible';
-                    if (window.ScrollLock) window.ScrollLock.lock();
-                    setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
-                }};
-                trigger.addEventListener('click', (e) => {{
-                    e.stopPropagation();
-                    const all = document.querySelectorAll('[data-target="target__dropdown"]');
-                    let otherOpen = false;
-                    all.forEach(dd => {{
-                        if (dd !== dropdown && dd.getAttribute('data-state') === 'open') {{
-                            otherOpen = true;
-                            dd.setAttribute('data-state', 'closed');
-                            dd.style.pointerEvents = 'none';
-                            if (window.ScrollLock) window.ScrollLock.unlock(200);
-                        }}
-                    }});
-                    if (otherOpen) return;
-                    if (isOpen) closeDropdown(); else openDropdown();
-                }});
-                dropdown.querySelectorAll('[data-dropdown-close]').forEach(action => action.addEventListener('click', closeDropdown));
-                document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape' && isOpen) {{ e.preventDefault(); closeDropdown(); }} }});
-            }};
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupDropdown);
-            else setupDropdown();
-        }})();"#,
-        tid = target_id,
-    );
+    let tid = target_id.clone();
+    use_effect(move || setup_dropdown(tid.clone()));
 
     rsx! {
         div {
@@ -236,12 +119,11 @@ pub fn DropdownMenuContent(
             class: "{merged}",
             "data-target": "target__dropdown",
             "data-state": "closed",
-            "data-align": align_for_script,
-            "data-position": position_for_script,
+            "data-align": align_attr,
+            "data-position": position_attr,
             style: "pointer-events: none;",
             {children}
         }
-        script { dangerous_inner_html: "{script}" }
     }
 }
 
@@ -392,4 +274,121 @@ pub fn DropdownMenuRadioItem<T: Clone + PartialEq + Send + Sync + 'static>(
             Check { class: "ml-auto opacity-0 size-4 text-muted-foreground group-aria-checked:opacity-100" }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Verhalten: Auslöser schaltet um (andere offene Menüs schliessen zuerst), Klick daneben,
+// Aktionen und Escape schliessen; Lage nach `data-align`/`data-position` am Auslöser.
+// ---------------------------------------------------------------------------
+
+fn place_dropdown(dropdown: &web_sys::HtmlElement, trigger: &web_sys::HtmlElement) {
+    use super::dom;
+    let window = web_sys::window();
+    let contents = window
+        .as_ref()
+        .and_then(|w| w.get_computed_style(trigger).ok().flatten())
+        .and_then(|s| s.get_property_value("display").ok())
+        .is_some_and(|d| d == "contents");
+    let anchor: web_sys::Element =
+        if contents { trigger.first_element_child().unwrap_or_else(|| trigger.clone().into()) } else { trigger.clone().into() };
+    let t = anchor.get_bounding_client_rect();
+    let d = dropdown.get_bounding_client_rect();
+    let vh = window.and_then(|w| w.inner_height().ok()).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let below = vh - t.bottom();
+    let above = t.top();
+    let align = dropdown.get_attribute("data-align").unwrap_or_else(|| "start".into());
+    let up = match dropdown.get_attribute("data-position").as_deref() {
+        Some("top") => true,
+        Some("bottom") => false,
+        _ => above >= d.height() && below < d.height(),
+    };
+    let top_above = t.top() - d.height() - 6.0;
+    let (top, left, origin) = match align.as_str() {
+        "end" => (if up { top_above } else { t.bottom() + 6.0 }, t.right() - d.width(), if up { "right bottom" } else { "right top" }),
+        "start-outer" => (if up { top_above } else { t.top() }, t.left() - d.width() - 16.0, if up { "right bottom" } else { "right top" }),
+        "end-outer" => (if up { top_above } else { t.top() }, t.right() + 8.0, if up { "left bottom" } else { "left top" }),
+        "center" => {
+            dom::set_style(dropdown, "min-width", &format!("{}px", t.width()));
+            (if up { top_above } else { t.bottom() + 6.0 }, t.left(), if up { "center bottom" } else { "center top" })
+        }
+        _ => (if up { top_above } else { t.bottom() + 6.0 }, t.left(), if up { "left bottom" } else { "left top" }),
+    };
+    dom::set_style(dropdown, "top", &format!("{top}px"));
+    dom::set_style(dropdown, "left", &format!("{left}px"));
+    dom::set_style(dropdown, "transform-origin", origin);
+}
+
+fn setup_dropdown(tid: String) {
+    use super::dom;
+    use std::{cell::RefCell, rc::Rc};
+
+    dom::when_ready(move || {
+        let trigger_sel = format!("[data-dropdown-trigger=\"{tid}\"]");
+        let (Some(dropdown), Some(trigger)) = (dom::by_id(&tid), dom::query(&trigger_sel)) else { return false };
+        if !dom::init_once(&dropdown, "data-initialized") {
+            return true;
+        }
+        let Some(doc) = dom::document() else { return true };
+        let outside: Rc<RefCell<Option<js_sys::Function>>> = Rc::default();
+
+        let close: Rc<dyn Fn()> = {
+            let (dd, outside, doc) = (dropdown.clone(), outside.clone(), doc.clone());
+            Rc::new(move || {
+                dom::set_open(&[&dd], false);
+                if let Some(f) = outside.borrow_mut().take() {
+                    dom::unlisten(&doc, "click", &f);
+                }
+            })
+        };
+        let open: Rc<dyn Fn()> = {
+            let (dd, t, outside, doc, close) = (dropdown.clone(), trigger.clone(), outside.clone(), doc.clone(), close.clone());
+            Rc::new(move || {
+                dom::set_open(&[&dd], true);
+                dom::set_style(&dd, "visibility", "hidden");
+                let _ = dd.offset_height();
+                place_dropdown(&dd, &t);
+                dom::set_style(&dd, "visibility", "visible");
+                let (dd2, t2, outside2, doc2, close2) = (dd.clone(), t.clone(), outside.clone(), doc.clone(), close.clone());
+                dom::later(0, move || {
+                    if !dom::is_open(&dd2) || outside2.borrow().is_some() {
+                        return;
+                    }
+                    let f = dom::listen(&doc2, "click", move |e: web_sys::Event| {
+                        if !dom::contains_target(&dd2, &e) && !dom::contains_target(&t2, &e) {
+                            close2();
+                        }
+                    });
+                    *outside2.borrow_mut() = Some(f);
+                });
+            })
+        };
+        dom::listen(&trigger, "click", {
+            let (dd, open, close) = (dropdown.clone(), open.clone(), close.clone());
+            move |e: web_sys::Event| {
+                e.stop_propagation();
+                let mut other_open = false;
+                for other in dom::query_doc("[data-target=\"target__dropdown\"]") {
+                    if !other.is_same_node(Some(&dd)) && dom::is_open(&other) {
+                        other_open = true;
+                        dom::set_open(&[&other], false);
+                    }
+                }
+                if other_open {
+                    return;
+                }
+                if dom::is_open(&dd) { close() } else { open() }
+            }
+        });
+        for action in dom::query_all(&dropdown, "[data-dropdown-close]") {
+            let close = close.clone();
+            dom::listen(&action, "click", move |_: web_sys::Event| close());
+        }
+        dom::listen(&doc, "keydown", move |e: web_sys::KeyboardEvent| {
+            if e.key() == "Escape" && dom::is_open(&dropdown) {
+                e.prevent_default();
+                close();
+            }
+        });
+        true
+    });
 }

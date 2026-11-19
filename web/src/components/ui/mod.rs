@@ -37,3 +37,4 @@ pub mod breadcrumb;
 pub mod slider;
 pub mod pagination;
 pub mod alert_dialog;
+pub mod dom;

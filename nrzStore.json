@@ -3,7 +3,7 @@
   "app": "nrz-monitor",
   "tagPrefix": "umbrel-",
   "package": "umbrel",
-  "releaseNotes": "1.0.2: Neu - Seite Strom: aktuelle Leistung (gemessen mit RAPL plus einstellbarer Grundlast und Netzteilverlust), Verlauf, Energie in kWh und Kosten in Euro je Stunde, Tag, Monat und Jahr mit Hochrechnung. Strompreis in Cent je kWh mit Gueltig-ab-Zeitpunkt - ab jetzt oder rueckwirkend, die Kosten werden dann neu gerechnet.",
+  "releaseNotes": "1.1.0: Neu - MCP-Server: KI-Programme (Claude, Cursor, n8n ...) und externe Dashboards fragen alles ab - Live-Werte, Zeitreihen, Kennzahlen, Ranglisten, Ereignisse, Container mit Logs, Alarme, DNS, Strom und Speicher. Dazu ein Live-Strom (Server-Sent Events) und die REST-API mit eigenem Schluessel unter /mcp. Adresse, Schluessel und fertige Befehle unter Einstellungen -> MCP-Server & Dashboards.",
   "manifest": {
     "tagline": "Ueberwachung wie Netdata: Host, jeder Container, DNS, Cloudflare und NetBird - live und sparsam",
     "category": "networking",

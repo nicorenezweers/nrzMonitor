@@ -2,6 +2,12 @@ use dioxus::prelude::*;
 use icons::Check;
 use tw_merge::tw_merge;
 
+use std::{cell::Cell, collections::HashMap, rc::Rc};
+
+use wasm_bindgen::JsCast;
+use web_sys::{Event, HtmlElement, KeyboardEvent};
+
+use super::dom;
 use crate::components::ui::button::{Button, ButtonVariant};
 
 const TRIGGER_ID_QUALIFIER: &str = "command__trigger";
@@ -174,112 +180,10 @@ pub fn CommandDialog(children: Element, #[props(into, optional)] class: Option<S
     let backdrop_id = format!("{dialog_id}__{TRIGGER_ID_QUALIFIER}");
     let trigger_id = format!("{TRIGGER_ID_QUALIFIER}__{dialog_id}");
 
-    let script_content = format!(
-        r"
-        (function() {{
-            const KEY_HANDLER_KEY = '__commandDialog_{dialog_id}_keyHandler';
-            const CLICK_HANDLER_KEY = '__commandDialog_{dialog_id}_clickHandler';
-            const BACKDROP_HANDLER_KEY = '__commandDialog_{dialog_id}_backdropHandler';
-
-            const setupDialog = () => {{
-                const dialog = document.querySelector('#{dialog_id}');
-                const backdrop = document.querySelector('#{backdrop_id}');
-
-                if (!dialog || !backdrop) {{
-                    setTimeout(setupDialog, 50);
-                    return;
-                }}
-
-                if (window[KEY_HANDLER_KEY]) {{
-                    document.removeEventListener('keydown', window[KEY_HANDLER_KEY]);
-                }}
-                if (window[CLICK_HANDLER_KEY]) {{
-                    document.removeEventListener('click', window[CLICK_HANDLER_KEY]);
-                }}
-                if (window[BACKDROP_HANDLER_KEY]) {{
-                    document.removeEventListener('click', window[BACKDROP_HANDLER_KEY]);
-                }}
-
-                const clickHandler = (e) => {{
-                    const openBtn = e.target.closest('#{trigger_id}');
-                    if (!openBtn) return;
-
-                    const currentDialog = document.querySelector('#{dialog_id}');
-                    const currentBackdrop = document.querySelector('#{backdrop_id}');
-                    if (!currentDialog || !currentBackdrop) return;
-
-                    window.ScrollLock.lock();
-                    currentDialog.setAttribute('data-state', 'open');
-                    currentBackdrop.setAttribute('data-state', 'open');
-                    currentDialog.style.pointerEvents = 'auto';
-                    currentBackdrop.style.pointerEvents = 'auto';
-                }};
-
-                const backdropHandler = (e) => {{
-                    const clickedBackdrop = e.target.closest('#{backdrop_id}');
-                    if (!clickedBackdrop) return;
-
-                    const currentDialog = document.querySelector('#{dialog_id}');
-                    const currentBackdrop = document.querySelector('#{backdrop_id}');
-                    if (!currentDialog || !currentBackdrop) return;
-
-                    currentDialog.setAttribute('data-state', 'closed');
-                    currentBackdrop.setAttribute('data-state', 'closed');
-                    currentDialog.style.pointerEvents = 'none';
-                    currentBackdrop.style.pointerEvents = 'none';
-                    window.ScrollLock.unlock(100);
-                }};
-
-                const keyHandler = (e) => {{
-                    const currentDialog = document.querySelector('#{dialog_id}');
-                    const currentBackdrop = document.querySelector('#{backdrop_id}');
-                    if (!currentDialog || !currentBackdrop) return;
-
-                    const openDialog = () => {{
-                        window.ScrollLock.lock();
-                        currentDialog.setAttribute('data-state', 'open');
-                        currentBackdrop.setAttribute('data-state', 'open');
-                        currentDialog.style.pointerEvents = 'auto';
-                        currentBackdrop.style.pointerEvents = 'auto';
-                    }};
-
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {{
-                        e.preventDefault();
-                        if (currentDialog.getAttribute('data-state') !== 'open') openDialog();
-                    }}
-                    else if (e.key === '/' && currentDialog.getAttribute('data-state') !== 'open') {{
-                        const el = document.activeElement;
-                        const tag = el?.tagName;
-                        if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
-                        e.preventDefault();
-                        openDialog();
-                    }}
-                    else if (e.key === 'Escape' && currentDialog.getAttribute('data-state') === 'open') {{
-                        e.preventDefault();
-                        currentDialog.setAttribute('data-state', 'closed');
-                        currentBackdrop.setAttribute('data-state', 'closed');
-                        currentDialog.style.pointerEvents = 'none';
-                        currentBackdrop.style.pointerEvents = 'none';
-                        window.ScrollLock.unlock(100);
-                    }}
-                }};
-
-                window[KEY_HANDLER_KEY] = keyHandler;
-                window[CLICK_HANDLER_KEY] = clickHandler;
-                window[BACKDROP_HANDLER_KEY] = backdropHandler;
-                document.addEventListener('keydown', keyHandler);
-                document.addEventListener('click', clickHandler);
-                document.addEventListener('click', backdropHandler);
-            }};
-
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', setupDialog);
-            }} else {{
-                setupDialog();
-            }}
-        }})();
-        "
-    );
+    {
+        let (d, b, t) = (dialog_id.clone(), backdrop_id.clone(), trigger_id.clone());
+        use_effect(move || setup_command_dialog(d.clone(), b.clone(), t.clone()));
+    }
 
     rsx! {
         // Backdrop
@@ -299,7 +203,6 @@ pub fn CommandDialog(children: Element, #[props(into, optional)] class: Option<S
             style: "pointer-events: none;",
             {children}
         }
-        script { dangerous_inner_html: "{script_content}" }
     }
 }
 
@@ -327,237 +230,16 @@ pub fn Command(
         class.as_deref().unwrap_or("")
     );
 
-    let script_content = if let Some(ctx) = dialog_context {
-        let dialog_id = ctx.dialog_id;
-        let backdrop_id = format!("{dialog_id}__{TRIGGER_ID_QUALIFIER}");
-        format!(
-            r#"
-            (function() {{
-                const setupCommandKeyboard = () => {{
-                    const FIRST_INDEX = 0;
-                    const dialog = document.querySelector('#{dialog_id}');
-                    const backdrop = document.querySelector('#{backdrop_id}');
-                    const command_list = dialog?.querySelector('[data-name="CommandList"]');
-                    const command_input = dialog?.querySelector('[data-name="CommandInput"]');
-                    const command_items = command_list?.querySelectorAll('[data-name="CommandItemLink"]');
-                    const command_groups = command_list?.querySelectorAll('[data-name="CommandGroup"]');
-
-                    if (!command_items || command_items.length === 0 || !command_input) {{
-                        setTimeout(setupCommandKeyboard, 50);
-                        return;
-                    }}
-
-                    let index = FIRST_INDEX;
-
-                    const getVisibleItems = () => {{
-                        return Array.from(command_items).filter(item => {{
-                            if (item.style.display === 'none') return false;
-                            const group = item.closest('[data-name="CommandGroup"]');
-                            return !group || group.style.display !== 'none';
-                        }});
-                    }};
-
-                    const select = (i) => {{
-                        const visibleItems = getVisibleItems();
-                        if (visibleItems.length === 0) return;
-
-                        command_items.forEach(item => item.setAttribute('aria-selected', 'false'));
-                        if (visibleItems[i]) {{
-                            visibleItems[i].setAttribute('aria-selected', 'true');
-                            visibleItems[i].scrollIntoView({{ block: 'nearest', behavior: 'smooth' }});
-                        }}
-                    }};
-
-                    const filterItems = (query) => {{
-                        const searchQuery = query.toLowerCase().trim();
-
-                        command_items.forEach(item => {{
-                            const text = item.textContent.toLowerCase();
-                            if (searchQuery === '' || text.includes(searchQuery)) {{
-                                item.style.display = '';
-                            }} else {{
-                                item.style.display = 'none';
-                            }}
-                        }});
-
-                        command_groups.forEach(group => {{
-                            const groupItems = group.querySelectorAll('[data-name="CommandItemLink"]');
-                            const hasVisibleItems = Array.from(groupItems).some(item => item.style.display !== 'none');
-                            group.style.display = hasVisibleItems ? '' : 'none';
-                        }});
-
-                        index = FIRST_INDEX;
-                        select(FIRST_INDEX);
-                    }};
-
-                    command_input.addEventListener('input', (e) => {{
-                        filterItems(e.target.value);
-                    }});
-
-                    const closeDialog = () => {{
-                        backdrop.click();
-                    }};
-
-                    command_items.forEach((item) => {{
-                        item.addEventListener('click', () => {{
-                            closeDialog();
-                        }});
-                    }});
-
-                    document.addEventListener('keydown', (e) => {{
-                        if (dialog?.getAttribute('data-state') !== 'open') return;
-
-                        const visibleItems = getVisibleItems();
-                        if (visibleItems.length === 0) return;
-
-                        if (e.key === 'ArrowDown') {{
-                            e.preventDefault();
-                            if (index < visibleItems.length - 1) select(++index);
-                        }} else if (e.key === 'ArrowUp') {{
-                            e.preventDefault();
-                            if (index > FIRST_INDEX) select(--index);
-                            else command_list.scrollTo({{ top: 0, behavior: 'smooth' }});
-                        }} else if (e.key === 'Enter') {{
-                            e.preventDefault();
-                            visibleItems[index]?.click();
-                        }}
-                    }});
-
-                    const observer = new MutationObserver((mutations) => {{
-                        mutations.forEach((mutation) => {{
-                            if (mutation.attributeName === 'data-state') {{
-                                if (dialog.getAttribute('data-state') === 'open') {{
-                                    command_input.value = '';
-                                    filterItems('');
-                                    index = FIRST_INDEX;
-                                    select(FIRST_INDEX);
-                                    setTimeout(() => command_input.focus(), 0);
-                                }}
-                            }}
-                        }});
-                    }});
-
-                    observer.observe(dialog, {{ attributes: true }});
-                }};
-
-                if (document.readyState === 'loading') {{
-                    document.addEventListener('DOMContentLoaded', setupCommandKeyboard);
-                }} else {{
-                    setupCommandKeyboard();
-                }}
-            }})();
-            "#
-        )
-    } else {
-        r#"
-        (function() {
-            const setupCommand = () => {
-                const FIRST_INDEX = 0;
-                const command_list = document.querySelector('[data-name="CommandList"]');
-                const command_input = document.querySelector('[data-name="CommandInput"]');
-                const command_items = command_list?.querySelectorAll('[data-name="CommandItemLink"]');
-                const command_groups = command_list?.querySelectorAll('[data-name="CommandGroup"]');
-
-                if (!command_items || command_items.length === 0) {
-                    setTimeout(setupCommand, 50);
-                    return;
-                }
-
-                let index = FIRST_INDEX;
-
-                const getVisibleItems = () => {
-                    return Array.from(command_items).filter(item => item.style.display !== 'none');
-                };
-
-                const select = (i) => {
-                    const visibleItems = getVisibleItems();
-                    if (visibleItems.length === 0) return;
-
-                    command_items.forEach(item => item.setAttribute('aria-selected', 'false'));
-                    if (visibleItems[i]) {
-                        visibleItems[i].setAttribute('aria-selected', 'true');
-                        visibleItems[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                    }
-                };
-
-                const filterItems = (query) => {
-                    const searchQuery = query.toLowerCase().trim();
-
-                    command_items.forEach(item => {
-                        const text = item.textContent.toLowerCase();
-                        if (searchQuery === '' || text.includes(searchQuery)) {
-                            item.style.display = '';
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
-
-                    if (command_groups) {
-                        command_groups.forEach(group => {
-                            const groupItems = group.querySelectorAll('[data-name="CommandItemLink"]');
-                            const hasVisibleItems = Array.from(groupItems).some(item => item.style.display !== 'none');
-                            group.style.display = hasVisibleItems ? '' : 'none';
-                        });
-                    }
-
-                    index = FIRST_INDEX;
-                    select(FIRST_INDEX);
-                };
-
-                if (command_input) {
-                    command_input.addEventListener('input', (e) => {
-                        filterItems(e.target.value);
-                    });
-                }
-
-                select(FIRST_INDEX);
-
-                document.addEventListener('keydown', (e) => {
-                    const visibleItems = getVisibleItems();
-                    if (visibleItems.length === 0) return;
-
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        if (index < visibleItems.length - 1) select(++index);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        if (index > FIRST_INDEX) select(--index);
-                        else command_list.scrollTo({ top: 0, behavior: 'smooth' });
-                    } else if (e.key === 'Enter') {
-                        e.preventDefault();
-                        visibleItems[index]?.click();
-                    }
-                });
-            };
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', setupCommand);
-            } else {
-                setupCommand();
-            }
-        })();
-        "#
-        .to_string()
-    };
+    let scope = dialog_context.map(|ctx| {
+        let backdrop_id = format!("{}__{TRIGGER_ID_QUALIFIER}", ctx.dialog_id);
+        (ctx.dialog_id, backdrop_id)
+    });
+    use_effect(move || setup_command(scope.clone()));
 
     rsx! {
-        style {
-            r#"
-            /* Command component - aria-selected styling */
-            [data-name="CommandItemLink"][aria-selected="true"],
-            [data-name="CommandItem"][aria-selected="true"] {{
-                background-color: var(--color-muted);
-            }}
-            /* Hide CommandEmpty when there are visible items */
-            [data-name="CommandList"]:has([data-name="CommandItem"][style*="flex"]) [data-name="CommandEmpty"] {{
-                display: none;
-            }}
-            "#
-        }
         div { "data-name": "Command", class: "{merged_class}", tabindex: "-1",
             {children}
         }
-        script { dangerous_inner_html: "{script_content}" }
     }
 }
 
@@ -664,4 +346,274 @@ pub fn CommandItem(
             Check { class: check_class }
         }
     }
+}
+
+/* ========================================================== */
+/*                     ✨ VERHALTEN ✨                        */
+/* ========================================================== */
+
+thread_local! {
+    /// Am Dokument gebundene Rückrufe je Palette – beim erneuten Einrichten zuerst lösen.
+    static DIALOG_HANDLERS: std::cell::RefCell<HashMap<String, Vec<(&'static str, js_sys::Function)>>> =
+        std::cell::RefCell::default();
+}
+
+fn set_dialog_open(dialog_id: &str, backdrop_id: &str, open: bool) {
+    if let (Some(d), Some(b)) = (dom::by_id(dialog_id), dom::by_id(backdrop_id)) {
+        dom::set_open(&[&d, &b], open);
+    }
+}
+
+// Öffnen über den Auslöser, ⌘K/Strg+K oder „/“; schliessen über Hintergrund und Escape.
+fn setup_command_dialog(dialog_id: String, backdrop_id: String, trigger_id: String) {
+    dom::when_ready(move || {
+        if dom::by_id(&dialog_id).is_none() || dom::by_id(&backdrop_id).is_none() {
+            return false;
+        }
+        let Some(doc) = dom::document() else { return true };
+        DIALOG_HANDLERS.with(|h| {
+            for (ty, f) in h.borrow_mut().remove(&dialog_id).unwrap_or_default() {
+                dom::unlisten(&doc, ty, &f);
+            }
+        });
+
+        let (d, b, t) = (dialog_id.clone(), backdrop_id.clone(), trigger_id.clone());
+        let click = dom::listen(&doc, "click", move |e: Event| {
+            if dom::target_element(&e).and_then(|el| el.closest(&format!("#{t}")).ok().flatten()).is_some() {
+                set_dialog_open(&d, &b, true);
+            }
+        });
+        let (d, b) = (dialog_id.clone(), backdrop_id.clone());
+        let backdrop = dom::listen(&doc, "click", move |e: Event| {
+            if dom::target_element(&e).and_then(|el| el.closest(&format!("#{b}")).ok().flatten()).is_some() {
+                set_dialog_open(&d, &b, false);
+            }
+        });
+        let (d, b) = (dialog_id.clone(), backdrop_id.clone());
+        let key = dom::listen(&doc, "keydown", move |e: KeyboardEvent| {
+            let Some(dialog) = dom::by_id(&d) else { return };
+            let open = dom::is_open(&dialog);
+            let k = e.key();
+            if (e.meta_key() || e.ctrl_key()) && k == "k" {
+                e.prevent_default();
+                if !open {
+                    set_dialog_open(&d, &b, true);
+                }
+            } else if k == "/" && !open {
+                let typing = dom::document()
+                    .and_then(|doc| doc.active_element())
+                    .and_then(|el| el.dyn_into::<HtmlElement>().ok())
+                    .is_some_and(|el| matches!(el.tag_name().as_str(), "INPUT" | "TEXTAREA") || el.is_content_editable());
+                if typing {
+                    return;
+                }
+                e.prevent_default();
+                set_dialog_open(&d, &b, true);
+            } else if k == "Escape" && open {
+                e.prevent_default();
+                set_dialog_open(&d, &b, false);
+            }
+        });
+        DIALOG_HANDLERS.with(|h| {
+            h.borrow_mut().insert(dialog_id.clone(), vec![("click", click), ("click", backdrop), ("keydown", key)]);
+        });
+        true
+    });
+}
+
+/// Liste der Palette: Filtern, Auswahl mit Pfeiltasten, Enter klickt den gewählten Eintrag.
+struct PaletteList {
+    list: HtmlElement,
+    items: Vec<HtmlElement>,
+    groups: Vec<HtmlElement>,
+    in_dialog: bool,
+    index: Cell<usize>,
+}
+
+fn hidden(el: &HtmlElement) -> bool {
+    el.style().get_property_value("display").ok().as_deref() == Some("none")
+}
+
+impl PaletteList {
+    fn visible(&self) -> Vec<&HtmlElement> {
+        self.items
+            .iter()
+            .filter(|item| {
+                if hidden(item) {
+                    return false;
+                }
+                !self.in_dialog
+                    || item
+                        .closest("[data-name=\"CommandGroup\"]")
+                        .ok()
+                        .flatten()
+                        .and_then(|g| g.dyn_into::<HtmlElement>().ok())
+                        .is_none_or(|g| !hidden(&g))
+            })
+            .collect()
+    }
+
+    fn select(&self, i: usize) {
+        let visible = self.visible();
+        if visible.is_empty() {
+            return;
+        }
+        for item in &self.items {
+            let _ = item.set_attribute("aria-selected", "false");
+        }
+        if let Some(item) = visible.get(i) {
+            let _ = item.set_attribute("aria-selected", "true");
+            let opts = web_sys::ScrollIntoViewOptions::new();
+            opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
+            opts.set_behavior(web_sys::ScrollBehavior::Smooth);
+            item.scroll_into_view_with_scroll_into_view_options(&opts);
+        }
+    }
+
+    fn filter(&self, query: &str) {
+        let q = query.trim().to_lowercase();
+        for item in &self.items {
+            let text = item.text_content().unwrap_or_default().to_lowercase();
+            dom::set_style(item, "display", if q.is_empty() || text.contains(&q) { "" } else { "none" });
+        }
+        for group in &self.groups {
+            let any = dom::query_all(group, "[data-name=\"CommandItemLink\"]").iter().any(|i| !hidden(i));
+            dom::set_style(group, "display", if any { "" } else { "none" });
+        }
+        self.index.set(0);
+        self.select(0);
+    }
+
+    fn key(&self, e: &KeyboardEvent) {
+        let visible = self.visible();
+        if visible.is_empty() {
+            return;
+        }
+        let i = self.index.get();
+        match e.key().as_str() {
+            "ArrowDown" => {
+                e.prevent_default();
+                if i + 1 < visible.len() {
+                    self.index.set(i + 1);
+                    self.select(i + 1);
+                }
+            }
+            "ArrowUp" => {
+                e.prevent_default();
+                if i > 0 {
+                    self.index.set(i - 1);
+                    self.select(i - 1);
+                } else {
+                    let opts = web_sys::ScrollToOptions::new();
+                    opts.set_top(0.0);
+                    opts.set_behavior(web_sys::ScrollBehavior::Smooth);
+                    self.list.scroll_to_with_scroll_to_options(&opts);
+                }
+            }
+            "Enter" => {
+                e.prevent_default();
+                if let Some(item) = visible.get(i) {
+                    item.click();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// `scope`: (Dialog-ID, Hintergrund-ID), wenn die Liste in einem `CommandDialog` steht.
+fn setup_command(scope: Option<(String, String)>) {
+    dom::when_ready(move || {
+        let dialog = match &scope {
+            Some((d, _)) => match dom::by_id(d) {
+                Some(d) => Some(d),
+                None => return false,
+            },
+            None => None,
+        };
+        let root: web_sys::Element = match &dialog {
+            Some(d) => d.clone().into(),
+            None => match dom::document().and_then(|d| d.document_element()) {
+                Some(r) => r,
+                None => return true,
+            },
+        };
+        let list = dom::query_all(&root, "[data-name=\"CommandList\"]").into_iter().next();
+        let input = dom::query_all(&root, "[data-name=\"CommandInput\"]").into_iter().next();
+        let Some(list) = list else { return false };
+        let items = dom::query_all(&list, "[data-name=\"CommandItemLink\"]");
+        if items.is_empty() || (dialog.is_some() && input.is_none()) {
+            return false;
+        }
+        let groups = dom::query_all(&list, "[data-name=\"CommandGroup\"]");
+        let cl = Rc::new(PaletteList { list, items, groups, in_dialog: dialog.is_some(), index: Cell::new(0) });
+
+        if let Some(input) = &input {
+            let cl = cl.clone();
+            dom::listen(input, "input", move |e: Event| {
+                let value = e
+                    .target()
+                    .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                    .map(|i| i.value())
+                    .unwrap_or_default();
+                cl.filter(&value);
+            });
+        }
+        let Some(doc) = dom::document() else { return true };
+
+        match (dialog, &scope, input) {
+            (Some(dialog), Some((_, backdrop_id)), Some(input)) => {
+                // Eintrag gewählt → Dialog über den Hintergrund schliessen
+                for item in &cl.items {
+                    let b = backdrop_id.clone();
+                    dom::listen(item, "click", move |_: Event| {
+                        if let Some(b) = dom::by_id(&b) {
+                            b.click();
+                        }
+                    });
+                }
+                dom::listen(&doc, "keydown", {
+                    let (cl, dialog) = (cl.clone(), dialog.clone());
+                    move |e: KeyboardEvent| {
+                        if dom::is_open(&dialog) {
+                            cl.key(&e);
+                        }
+                    }
+                });
+                // beim Öffnen: Suche leeren, erster Eintrag gewählt, Fokus ins Suchfeld
+                let input = input.dyn_into::<web_sys::HtmlInputElement>().ok();
+                let d = dialog.clone();
+                let cb = wasm_bindgen::closure::Closure::<dyn FnMut(js_sys::Array)>::new(move |records: js_sys::Array| {
+                    let changed = records.iter().any(|r| {
+                        r.dyn_into::<web_sys::MutationRecord>()
+                            .ok()
+                            .and_then(|r| r.attribute_name())
+                            .as_deref()
+                            == Some("data-state")
+                    });
+                    if changed && dom::is_open(&d) {
+                        if let Some(input) = &input {
+                            input.set_value("");
+                            let input = input.clone();
+                            dom::later(0, move || {
+                                let _ = input.focus();
+                            });
+                        }
+                        cl.filter("");
+                    }
+                });
+                if let Ok(observer) = web_sys::MutationObserver::new(cb.as_ref().unchecked_ref()) {
+                    let opts = web_sys::MutationObserverInit::new();
+                    opts.set_attributes(true);
+                    let _ = observer.observe_with_options(&dialog, &opts);
+                }
+                cb.forget();
+            }
+            _ => {
+                cl.select(0);
+                dom::listen(&doc, "keydown", move |e: KeyboardEvent| cl.key(&e));
+            }
+        }
+        true
+    });
 }

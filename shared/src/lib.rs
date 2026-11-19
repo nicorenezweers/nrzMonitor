@@ -14,6 +14,7 @@ pub mod query;
 pub mod alerts;
 pub mod cloudflare;
 pub mod dns;
+pub mod mcp;
 pub mod docker;
 pub mod netbird;
 pub mod power;

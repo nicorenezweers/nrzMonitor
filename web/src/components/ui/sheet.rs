@@ -97,37 +97,7 @@ pub fn SheetContent(
 
     let tid = target_id.clone();
     let bid = backdrop_id.clone();
-    let script = format!(
-        r#"(function() {{
-        const setup = () => {{
-            const sheet = document.getElementById('{tid}');
-            const backdrop = document.getElementById('{bid}');
-            const trigger = document.querySelector('[data-sheet-trigger="{tid}"]');
-            if (!sheet || !backdrop || !trigger) {{ setTimeout(setup, 50); return; }}
-            if (sheet.hasAttribute('data-initialized')) return;
-            sheet.setAttribute('data-initialized', 'true');
-            const open = () => {{
-                sheet.setAttribute('data-state', 'open');
-                backdrop.setAttribute('data-state', 'open');
-                sheet.style.pointerEvents = 'auto';
-                backdrop.style.pointerEvents = 'auto';
-                if (window.ScrollLock) window.ScrollLock.lock();
-            }};
-            const close = () => {{
-                sheet.setAttribute('data-state', 'closed');
-                backdrop.setAttribute('data-state', 'closed');
-                sheet.style.pointerEvents = 'none';
-                backdrop.style.pointerEvents = 'none';
-                if (window.ScrollLock) window.ScrollLock.unlock(300);
-            }};
-            trigger.addEventListener('click', open);
-            sheet.querySelectorAll('[data-sheet-close]').forEach(b => b.addEventListener('click', close));
-            backdrop.addEventListener('click', () => {{ if (sheet.getAttribute('data-backdrop') === 'auto') close(); }});
-            document.addEventListener('keydown', e => {{ if (e.key === 'Escape' && sheet.getAttribute('data-state') === 'open') {{ e.preventDefault(); close(); }} }});
-        }};
-        if (document.readyState === 'loading') {{ document.addEventListener('DOMContentLoaded', setup); }} else {{ setup(); }}
-    }})();"#
-    );
+    use_effect(move || setup_sheet(tid.clone(), bid.clone()));
 
     rsx! {
         div {
@@ -153,7 +123,6 @@ pub fn SheetContent(
             }
             {children}
         }
-        script { dangerous_inner_html: "{script}" }
     }
 }
 
@@ -208,4 +177,48 @@ pub fn SheetBody(#[props(into, optional)] class: Option<String>, children: Eleme
 pub fn SheetFooter(#[props(into, optional)] class: Option<String>, children: Element) -> Element {
     let c = tw_merge!("mt-auto flex flex-col gap-2 p-4", class.as_deref().unwrap_or(""));
     rsx! { footer { "data-name": "SheetFooter", class: "{c}", {children} } }
+}
+
+// Verhalten: öffnen über den Auslöser, schliessen über Knöpfe, Hintergrund und Escape.
+fn setup_sheet(tid: String, bid: String) {
+    use super::dom;
+    dom::when_ready(move || {
+        let trigger_sel = format!("[data-sheet-trigger=\"{tid}\"]");
+        let (Some(sheet), Some(backdrop), Some(trigger)) = (dom::by_id(&tid), dom::by_id(&bid), dom::query(&trigger_sel))
+        else {
+            return false;
+        };
+        if !dom::init_once(&sheet, "data-initialized") {
+            return true;
+        }
+        let set = {
+            let (s, b) = (sheet.clone(), backdrop.clone());
+            move |open: bool| dom::set_open(&[&s, &b], open)
+        };
+        dom::listen(&trigger, "click", {
+            let set = set.clone();
+            move |_: web_sys::Event| set(true)
+        });
+        for btn in dom::query_all(&sheet, "[data-sheet-close]") {
+            let set = set.clone();
+            dom::listen(&btn, "click", move |_: web_sys::Event| set(false));
+        }
+        dom::listen(&backdrop.clone(), "click", {
+            let (set, b) = (set.clone(), backdrop);
+            move |_: web_sys::Event| {
+                if b.get_attribute("data-backdrop").as_deref() == Some("auto") {
+                    set(false);
+                }
+            }
+        });
+        if let Some(doc) = dom::document() {
+            dom::listen(&doc, "keydown", move |e: web_sys::KeyboardEvent| {
+                if e.key() == "Escape" && dom::is_open(&sheet) {
+                    e.prevent_default();
+                    set(false);
+                }
+            });
+        }
+        true
+    });
 }

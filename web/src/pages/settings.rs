@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use super::{alerts::AlertSettings, integrations::IntegrationSettings, storage::StorageSettings};
+use super::{alerts::AlertSettings, integrations::IntegrationSettings, mcp::McpSettings, storage::StorageSettings};
 use crate::{
     components::{
         layout::{default_span, set_default_span},
@@ -26,7 +26,7 @@ pub fn Settings() -> Element {
     let live_window = shared::model::duration(f64::from(info.live_window));
     rsx! {
         PageContainer { width: PageWidth::Narrow,
-            PageHeader { title: "Einstellungen", description: "Allgemeines, Integrationen, Speicher und Benachrichtigungen" }
+            PageHeader { title: "Einstellungen", description: "Allgemeines, Integrationen, Speicher, Benachrichtigungen und MCP" }
             div { class: "grid gap-6",
                 SettingsGroup { title: "Allgemein",
                     SettingsRow { label: "Host", span { class: "text-sm text-muted-foreground", "{info.hostname}" } }
@@ -82,6 +82,7 @@ pub fn Settings() -> Element {
                 IntegrationSettings {}
                 StorageSettings {}
                 AlertSettings {}
+                McpSettings {}
             }
         }
     }

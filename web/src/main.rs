@@ -14,11 +14,21 @@ mod state;
 
 use dioxus::prelude::*;
 
-const TAILWIND: Asset = asset!("/assets/tailwind.css");
+/// Stylesheet, beim Bauen von `build.rs` aus den Klassen im Quelltext erzeugt (siehe `style/`).
+const CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/nrz.css"));
 const FAVICON: Asset = asset!("/assets/favicon.svg");
 
 fn main() {
+    install_css();
     dioxus::launch(App);
+}
+
+/// Stylesheet in den `<head>` legen, bevor die Oberfläche das erste Mal zeichnet.
+fn install_css() {
+    let Some(doc) = web_sys::window().and_then(|w| w.document()) else { return };
+    let (Ok(style), Ok(Some(head))) = (doc.create_element("style"), doc.query_selector("head")) else { return };
+    style.set_text_content(Some(CSS));
+    let _ = head.append_child(&style);
 }
 
 #[component]
@@ -30,7 +40,6 @@ fn App() -> Element {
         document::Meta { name: "apple-mobile-web-app-capable", content: "yes" }
         document::Title { "nrzMonitor" }
         document::Link { rel: "icon", href: FAVICON }
-        document::Stylesheet { href: TAILWIND }
         Router::<route::Route> {}
     }
 }
