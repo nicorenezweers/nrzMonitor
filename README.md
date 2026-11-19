@@ -1,6 +1,6 @@
 # nrzMonitor - Umbrel-Paket
 
-Nur fertige Dateien fuer die App `nrz-monitor` im nrzStore (erstellt mit `scripts/umbrel-release.sh`).
+Nur fertige Dateien fuer die App `nrz-monitor` im nrzStore (erstellt mit `cargo xtask umbrel-release`).
 `hooks/pre-start` im Store laedt sie per Tag `umbrel-<version>`.
 
 | Datei | Inhalt |
