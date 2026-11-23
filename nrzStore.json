@@ -3,7 +3,7 @@
   "app": "nrz-monitor",
   "tagPrefix": "umbrel-",
   "package": "umbrel",
-  "releaseNotes": "1.1.0: Neu - MCP-Server: KI-Programme (Claude, Cursor, n8n ...) und externe Dashboards fragen alles ab - Live-Werte, Zeitreihen, Kennzahlen, Ranglisten, Ereignisse, Container mit Logs, Alarme, DNS, Strom und Speicher. Dazu ein Live-Strom (Server-Sent Events) und die REST-API mit eigenem Schluessel unter /mcp. Adresse, Schluessel und fertige Befehle unter Einstellungen -> MCP-Server & Dashboards.",
+  "releaseNotes": "1.1.1: Sicherheits-Updates (nrzSecurity) - url 2.5.9, cookie 0.18.3.",
   "manifest": {
     "tagline": "Ueberwachung wie Netdata: Host, jeder Container, DNS, Cloudflare und NetBird - live und sparsam",
     "category": "networking",
